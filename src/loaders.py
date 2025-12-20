@@ -29,10 +29,10 @@ def load_mat_spike_data(
     
     rho = data[spike_var].flatten()  #flatten to 1D
 
-    unique_vals= np.unique(rho)
-    if not np.ndarray(unique_vals, [0, 1]) and not np.array_equal(unique_vals, [1]):
+    unique_vals = np.unique(rho)
+    if not set(unique_vals).issubset({0, 1}):
         raise ValueError(f"Spike variable not binary. unique values: {unique_vals}")
-    
+
     # Convert binary array to spike times
     spike_indices = np.where(rho == 1)[0]
     spike_times = spike_indices / sampling_rate

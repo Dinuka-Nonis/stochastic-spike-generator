@@ -60,6 +60,44 @@ def homogeneous_poisson(
     # FIX: Changed np.ndarray to np.array
     return np.array(spike_times)
 
+def homogeneous_poisson_with_refractoriness(
+        firing_rate: float,
+        duration: float,
+        refractory_period: float = 0.002,
+        random_seed: int = None
+) -> np.ndarray:
+    """
+    Generate poisson spike train with absolute refractory period
+
+    Adds biological realism to the system by enforcing to have a minimum time between spikes
+
+    """
+    if random_seed is not None: 
+        np.random.seed(random_seed)
+
+    #validate inputs
+    if firing_rate <= 0:
+        raise ValueError("firing_rate must be positive")
+    if duration <= 0:
+        raise ValueError("duration must be positive")
+    if refractory_period < 0:
+        raise ValueError("refractory_period must be non-negative")
+    if refractory_period > 1.0:
+        raise ValueError("refractory_period > 1s seems unrealistic")
+    
+    poisso_spikes = homogeneous_poisson(firing_rate, duration, random_seed=None)
+
+    valid_spikes = []
+    last_spike_time =- refractory_period
+
+    for spike_time in poisso_spikes:
+        time_since_last = spike_time - last_spike_time
+
+        if time_since_last >= refractory_period:
+            valid_spikes.append(spike_time)
+            last_spike_time = spike_time
+        
+    return np.array(valid_spikes)
 
 def homogeneous_poisson_batch(
         firing_rate: float,
@@ -90,6 +128,39 @@ def homogeneous_poisson_batch(
     for _ in range(n_trials):
         # FIX: Added missing 'duration' parameter
         spikes = homogeneous_poisson(firing_rate, duration, random_seed=None)
+        spike_trains.append(spikes)
+
+    return spike_trains
+
+def refractory_poisson_batch(
+        firing_rate: float, 
+        duration: float,
+        refractory_period: float = 0.002,
+        n_trials: int = 100,
+        random_seed:int = None
+) -> list:
+    """
+    generate multiple independent poisson spike trains with refractoriness.
+
+    Args:
+        firing_rate (float): target firing rate in Hz
+        duration (float): total duration of the spike train in seconds
+        refractory_period (float, optional): absolute refractory period in seconds. Defaults to 0.002.
+        n_trials (int, optional): Number of independent spike trains. Defaults to 100.
+        random_seed (int, optional): random seed for reproducibility. Defaults to None.
+
+    Returns:
+        list: List of np.ndarray, each with refractory spike train
+    """
+
+    if random_seed is not None:
+        np.random.seed(random_seed)
+
+    spike_trains = []
+    for _ in range (n_trials):
+        spikes = homogeneous_poisson_with_refractoriness(
+            firing_rate, duration, refractory_period, random_seed = None
+        )
         spike_trains.append(spikes)
 
     return spike_trains

@@ -1,12 +1,19 @@
 """
+Inhomogeneous Poisson Process for Neural Spike Generation.
+
+Based on Dayan & Abbott "Theoretical Neuroscience" Chapter 1.4
+Implements time-varying firing rate driven by stimulus.
+
 Key concept:
   Instead of: r(t) = constant
   Use:        r(t) = f(stimulus(t))
   
 Where f is the stimulus-response transfer function learned from data.
 """
+
 import numpy as np
 from typing import Tuple
+from scipy.interpolate import interp1d
 
 
 def estimate_transfer_function(spike_times: np.ndarray, 
@@ -18,7 +25,7 @@ def estimate_transfer_function(spike_times: np.ndarray,
     
     For each stimulus value, compute average firing rate when that
     stimulus is presented. This gives us r(s) = firing rate given stimulus s.
-    
+
     """
     
     # Create binary spike array (1 if spike, 0 otherwise)
@@ -65,6 +72,9 @@ def inhomogeneous_poisson_generator(stimulus: np.ndarray,
       - Interpolate to find r(s(t)) from transfer function
       - Generate spike with probability r(s(t)) × dt
     
+    CRITICAL: This preserves stimulus variability because r(t) changes
+    with stimulus at each moment.
+    
     """
     
     if random_seed is not None:
@@ -73,17 +83,28 @@ def inhomogeneous_poisson_generator(stimulus: np.ndarray,
     stimulus_values, firing_rates = transfer_function
     dt = 1.0 / sampling_rate
     
-    # Interpolate transfer function across entire stimulus range
-    # For each time step, get firing rate based on current stimulus
-    firing_rate_trajectory = np.interp(stimulus, stimulus_values, firing_rates)
+    # Create interpolation function for transfer function
+    # This allows us to get r(s) for any stimulus value s
+    transfer_fn = interp1d(stimulus_values, firing_rates, 
+                           kind='linear', 
+                           bounds_error=False, 
+                           fill_value='extrapolate')
+    
+    # For each time step, get the firing rate based on current stimulus
+    # This is the KEY: rate changes with stimulus at EVERY time step
+    firing_rate_trajectory = transfer_fn(stimulus)
+    
+    # Ensure firing rates are non-negative
+    firing_rate_trajectory = np.maximum(firing_rate_trajectory, 0)
     
     # Generate spikes: at each time step, spike with probability r(t) × dt
     spike_array = np.zeros(len(stimulus), dtype=int)
     
     for i in range(len(stimulus)):
+        # Spike probability at this time step
         spike_prob = firing_rate_trajectory[i] * dt
         
-        # Ensure probability is valid
+        # Ensure probability is in [0, 1]
         spike_prob = np.clip(spike_prob, 0, 1)
         
         # Generate spike with this probability
@@ -104,6 +125,9 @@ def inhomogeneous_poisson_batch(stimulus: np.ndarray,
                                 random_seed: int = None) -> list:
     """
     Generate multiple independent inhomogeneous Poisson spike trains.
+    
+    Each trial uses the SAME transfer function and SAME stimulus,
+    but different random noise, so each trial differs.
     
     """
     
